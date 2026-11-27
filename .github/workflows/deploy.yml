@@ -1,0 +1,35 @@
+name: Deploy MCP server to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # manual "Run workflow" button
+
+permissions:
+  contents: read
+  id-token: write # lets GitHub issue an OIDC token that Google trusts (no stored key)
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # The service stays private: only accounts with run.invoker on it
+      # (the cloud-agent backend) can call it. So there is no public health check;
+      # the deploy itself fails if the container doesn't start.
+      - uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: cloud-mcp
+          region: ${{ vars.GCP_REGION }}
+          source: .
+          flags: >-
+            --max-instances=2
+            --service-account=${{ vars.RUNTIME_SA }}
+            --build-service-account=projects/${{ vars.GCP_PROJECT_ID }}/serviceAccounts/${{ vars.BUILD_SA }}
